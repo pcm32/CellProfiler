@@ -655,7 +655,12 @@ class Pipeline(object):
         
         self.file_walker = WalkCollection(self.on_walk_completed)
         self.__undo_stack = []
-    
+
+        self.__allow_multicore_headless = False
+
+    def allow_multi_core(self):
+        self.__allow_multicore_headless = True
+
     def copy(self, save_image_plane_details = True):
         '''Create a copy of the pipeline modules and settings'''
         fd = StringIO.StringIO()
@@ -1626,7 +1631,7 @@ class Pipeline(object):
         measurements.is_first_image = True
         for m in self.run_with_yield(frame, image_set_start, image_set_end,
                                      grouping, 
-                                     run_in_background=False,
+                                     run_in_background=self.__allow_multicore_headless,
                                      initial_measurements = measurements):
             measurements = m
         return measurements

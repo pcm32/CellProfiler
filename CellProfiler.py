@@ -302,6 +302,11 @@ def parse_args(args):
                       dest="show_gui",
                       default=default_show_gui,
                       help="Run headless (without the GUI)")
+    parser.add_option("--allow-parallel-headless",
+                      action="store_true",
+                      dest="allow_parallel",
+                      default=False,
+                      help="Allow multiprocessors on headless executions")
     parser.add_option("-r", "--run",
                       action="store_true",
                       dest="run_pipeline",
@@ -787,6 +792,8 @@ def run_pipeline_headless(options, args):
     from cellprofiler.pipeline import Pipeline, EXIT_STATUS, M_PIPELINE
     import cellprofiler.measurements as cpmeas
     pipeline = Pipeline()
+    if options.allow_parallel:
+        pipeline.allow_multi_core()
     initial_measurements = None
     try:
         if h5py.is_hdf5(options.pipeline_filename):
