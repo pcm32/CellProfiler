@@ -351,7 +351,7 @@ def evt_modulerunner_done(win, func):
 
 class ModuleRunner(threading.Thread):
     """Worker thread that executes the run() method of a module."""
-    def __init__(self, module, workspace, notify_window):
+    def __init__(self, module, workspace, notify_window, headless):
         super(ModuleRunner, self).__init__()
         self.module = module
         self.workspace = workspace
@@ -360,6 +360,7 @@ class ModuleRunner(threading.Thread):
         self.exited_run = False
         self.exception = None
         self.tb = None
+        self.headless = headless
         workspace.add_disposition_listener(self.on_disposition_changed)
     
     def on_disposition_changed(self, event):
@@ -392,7 +393,8 @@ class ModuleRunner(threading.Thread):
         self.exited_run = True
         
     def post_done(self):
-        post_module_runner_done_event(self.notify_window)
+        if not self.headless:
+            post_module_runner_done_event(self.notify_window)
         
 def post_module_runner_done_event(window):
     import wx
@@ -1812,7 +1814,7 @@ class Pipeline(object):
                     else:
                         # Turn on checks for calls to create_or_find_figure() in workspace.
                         workspace.in_background = True
-                        worker = ModuleRunner(module, workspace, frame)
+                        worker = ModuleRunner(module, workspace, frame, cpprefs.get_headless())
                         worker.start()
                         yield measurements
                         # After the worker finishes, we can clear this flag.
