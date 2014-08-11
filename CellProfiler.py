@@ -793,6 +793,8 @@ def run_pipeline_headless(options, args):
     import cellprofiler.measurements as cpmeas
     pipeline = Pipeline()
     if options.allow_parallel:
+        sys.stdout.write("Allowing parallel")
+        logging.info("Allowing parallel")
         pipeline.allow_multi_core()
     initial_measurements = None
     try:
