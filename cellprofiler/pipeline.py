@@ -35,9 +35,7 @@ import os
 import StringIO  # XXX - replace with cStringIO?
 import sys
 import tempfile
-import traceback
 import datetime
-import traceback
 import threading
 import urlparse
 import urllib
@@ -53,9 +51,8 @@ import cellprofiler.objects as cpo
 import cellprofiler.workspace as cpw
 import cellprofiler.settings as cps
 from cellprofiler.utilities.utf16encode import utf16encode, utf16decode
-from cellprofiler.matlab.cputils import make_cell_struct_dtype, new_string_cell_array, encapsulate_strings_in_arrays
+from cellprofiler.matlab.cputils import make_cell_struct_dtype, new_string_cell_array
 from cellprofiler.utilities.walk_in_background import WalkCollection, THREAD_STOP
-from bioformats.omexml import OMEXML
 import cellprofiler.utilities.version as cpversion
 import javabridge as J
 

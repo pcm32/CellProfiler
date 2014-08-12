@@ -13,7 +13,6 @@ Website: http://www.cellprofiler.org
 """
 
 import javabridge
-import bioformats
 import logging
 import os
 import sys
