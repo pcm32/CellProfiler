@@ -736,8 +736,10 @@ class AnalysisRunner(object):
                 close_all_on_exec()
 
             aw_args = ["--work-announce", cls.work_announce_address,
-                       "--plugins-directory", cpprefs.get_plugin_directory(),
                        "--ij-plugins-directory", cpprefs.get_ij_plugin_directory()]
+            if cpprefs.get_plugin_directory() is not None:
+                aw_args.append("--plugins-directory")
+                aw_args.append(cpprefs.get_plugin_directory())
             jvm_arg = "%dm" % cpprefs.get_jvm_heap_mb()
             aw_args.append("--jvm-heap-size=%s" % jvm_arg)
             # stdin for the subprocesses serves as a deadman's switch.  When
