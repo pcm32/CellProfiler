@@ -769,7 +769,6 @@ def run_pipeline_headless(options, args):
     
     if sys.platform == 'darwin':
         if options.start_awt:
-            import bioformats
             from javabridge import activate_awt
             activate_awt()
         
