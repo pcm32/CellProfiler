@@ -290,12 +290,14 @@ class AnalysisRunner(object):
 
     # event posting
     def post_event(self, evt):
-        self.event_listener(evt)
+        if self.event_listener is not None:
+            self.event_listener(evt)
         
     def post_run_display_handler(self, workspace, module):
-        event = DisplayPostRunRequest(module.module_num,
+        if self.event_listener is not None:
+            event = DisplayPostRunRequest(module.module_num,
                                       workspace.display_data)
-        self.event_listener(event)
+            self.event_listener(event)
         
     # XXX - catch and deal with exceptions in interface() and jobserver() threads
     def interface(self, 
