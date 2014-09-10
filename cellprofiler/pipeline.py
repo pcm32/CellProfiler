@@ -377,6 +377,8 @@ class ModuleRunner(threading.Thread):
             
     def run(self):
         try:
+            import javabridge
+            javabridge.attach()
             self.module.run(self.workspace)
         except Exception, instance:
             self.exception = instance
