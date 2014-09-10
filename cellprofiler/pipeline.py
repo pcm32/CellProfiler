@@ -1800,7 +1800,8 @@ class Pipeline(object):
                                         image_set_count, num_image_sets)
                     start_time = datetime.datetime.now()
                     t0 = sum(os.times()[:-1])
-                    if not run_in_background:
+                    # Load modules need to be waited for, otherwise there is no data for the other modules.
+                    if not run_in_background or module.is_load_module():
                         try:
                             module.run(workspace)
                         except Exception, instance:
