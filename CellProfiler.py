@@ -20,6 +20,8 @@ import os
 import numpy as np
 import tempfile
 from cStringIO import StringIO
+from cellprofiler.workspace import Workspace
+import cellprofiler.preferences as cpprefs
 
 OMERO_CK_HOST = "host"
 OMERO_CK_PORT = "port"
@@ -274,6 +276,37 @@ def main(args):
             except:
                 logging.root.warn("Failed to stop the JVM")
             os._exit(0)
+
+def getWorkspacePath(options):
+    """
+    This method should be part instead of a worskspace reader or resolver class, not part of this class.
+    :param options: the options parsed from the command line arguments.
+    :return: the path to the workspace, if any provided (None otherwise).
+    """
+    from cellprofiler.workspace import is_workspace_file
+
+    workspace_path = None
+    if options.pipeline_filename:
+        if is_workspace_file(options.pipeline_filename):
+            workspace_path = os.path.expanduser(options.pipeline_filename)
+
+    elif options.new_project:
+        workspace_path = False
+
+    return workspace_path
+
+def getPipelinePath(options):
+    from cellprofiler.workspace import is_workspace_file
+    if options.pipeline_filename:
+        if is_workspace_file(options.pipeline_filename):
+            pipeline_path = None
+        else:
+            pipeline_path = os.path.expanduser(options.pipeline_filename)
+    elif options.new_project:
+        pipeline_path = None
+    else:
+        pipeline_path = None
+    return pipeline_path
 
 def parse_args(args):
     '''Parse the CellProfiler command-line arguments'''
@@ -834,25 +867,70 @@ def run_pipeline_headless(options, args):
     else:
         groups = None
     use_hdf5 = len(args) > 0 and not args[0].lower().endswith(".mat")
-    measurements = pipeline.run(
-        image_set_start=image_set_start, 
-        image_set_end=image_set_end,
-        grouping=groups,
-        measurements_filename = None if not use_hdf5 else args[0],
-        initial_measurements = initial_measurements)
-    if len(args) > 0 and not use_hdf5:
-        pipeline.save_measurements(args[0], measurements)
-    if options.done_file is not None:
-        if (measurements is not None and 
-            measurements.has_feature(cpmeas.EXPERIMENT, EXIT_STATUS)):
-            done_text = measurements.get_experiment_measurement(EXIT_STATUS)
-        else:
-            done_text = "Failure"
-        fd = open(options.done_file, "wt")
-        fd.write("%s\n"%done_text)
-        fd.close()
-    if measurements is not None:
-        measurements.close()
+
+    # We use here the Analysis.start approach used in GUI if the allow-parallel option is used
+    if options.allow_parallel:
+        import cellprofiler.analysis as cpanalysis
+        num_workers = 10 # set this properly through a CLI option.
+
+        # Workspace needs to be initialized or read from file, to be able to call pipeline.prepare_for_run(workspace)
+        workspace_path = getWorkspacePath(options)
+        pipeline_path = getPipelinePath(options)
+
+        workspace = Workspace(pipeline, None, None, None, None, None, None)
+        if workspace_path is None:
+            '''Create a new workspace file'''
+            logging.info("Creating a new workspace file (no path)")
+            workspace.create()
+            pipeline.clear_urls()
+            pipeline.clear()
+            workspace.measurements.clear()
+            workspace.save_pipeline_to_measurements()
+            cpprefs.set_current_workspace_path(None)
+        else: # TODO re-write this
+            load_pipeline=(pipeline_path is None)
+            logging.debug("Loading workspace file from path "+workspace_path)
+            logging.debug("Loading pipeline : "+str(load_pipeline))
+            workspace.load(workspace_path, load_pipeline)
+            cpprefs.set_workspace_file(workspace_path)
+            cpprefs.set_current_workspace_path(workspace_path)
+            pipeline.load_file_list(workspace)
+            #pipeline.turn_off_batch_mode()
+            if not load_pipeline:
+                workspace.measurements.clear()
+                workspace.save_pipeline_to_measurements()
+        # All the workspace set up was adapted from PipelineController, this should be refactored and re-used.
+        logging.debug("**** About to run prepare_run")
+        pipeline.prepare_run(workspace)
+
+        # Avoiding initial_measurements and using workspace.measurements instead.
+        logging.debug("Initial measurements image number before Analysis run: "+str(workspace.measurements.get_image_numbers().size))
+        analysis = cpanalysis.Analysis(
+                    pipeline,
+                    measurements_filename=None if not use_hdf5 else args[0],
+                    initial_measurements=workspace.measurements)
+        analysis.start(None,num_workers)
+    else:
+        # otherwise, we just proceed as it used to be.
+        measurements = pipeline.run(
+            image_set_start=image_set_start,
+            image_set_end=image_set_end,
+            grouping=groups,
+            measurements_filename = None if not use_hdf5 else args[0],
+            initial_measurements = initial_measurements)
+        if len(args) > 0 and not use_hdf5:
+            pipeline.save_measurements(args[0], measurements)
+        if options.done_file is not None:
+            if (measurements is not None and
+                measurements.has_feature(cpmeas.EXPERIMENT, EXIT_STATUS)):
+                done_text = measurements.get_experiment_measurement(EXIT_STATUS)
+            else:
+                done_text = "Failure"
+            fd = open(options.done_file, "wt")
+            fd.write("%s\n"%done_text)
+            fd.close()
+        if measurements is not None:
+            measurements.close()
     
 if __name__ == "__main__":
     main(sys.argv)
