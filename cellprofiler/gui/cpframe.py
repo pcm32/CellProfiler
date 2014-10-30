@@ -12,7 +12,8 @@ Please see the AUTHORS file for credits.
 
 Website: http://www.cellprofiler.org
 """
-
+import logging
+logger = logging.getLogger(__name__)
 import inspect
 import os
 import pdb
@@ -99,6 +100,7 @@ ID_DEBUG_CHOOSE_RANDOM_IMAGE_SET = wx.NewId()
 ID_DEBUG_RELOAD = wx.NewId()
 ID_DEBUG_NUMPY = wx.NewId()
 ID_DEBUG_PDB = wx.NewId()
+ID_DEBUG_VIEW_WORKSPACE = wx.NewId()
 
 # ~*~
 ID_SAMPLE_INIT = wx.NewId()
@@ -466,10 +468,22 @@ class CPFrame(wx.Frame):
         if event.CanVeto() and not self.pipeline_controller.check_close():
             event.Veto()
             return
-        self.__workspace.measurements.flush()
-        self.__preferences_view.close()
-        self.pipeline_controller.on_close()
-        stop_validation_queue_thread()
+        try:
+            self.__workspace.measurements.flush()
+        except:
+            logger.warn("Failed to flush temporary measurements file during close", exc_info=True)
+        try:
+            self.__preferences_view.close()
+        except:
+            logger.warn("Failed during close", exc_info=True)
+        try:
+            self.pipeline_controller.on_close()
+        except:
+            logger.warn("Failed to close the pipeline controller", exc_info=True)
+        try:
+            stop_validation_queue_thread()
+        except:
+            logger.warn("Failed to stop pipeline validation thread", exc_info=True)
         wx.GetApp().ExitMainLoop()
 
     def __set_properties(self):
@@ -622,6 +636,7 @@ class CPFrame(wx.Frame):
         self.__menu_debug.Append(ID_DEBUG_CHOOSE_RANDOM_IMAGE_SET, 'Random Image Set','Advance to a random image set')
         self.__menu_debug.Append(ID_DEBUG_CHOOSE_GROUP, 'Choose Image Group', 'Choose which image set group to process in test-mode')
         self.__menu_debug.Append(ID_DEBUG_CHOOSE_IMAGE_SET, 'Choose Image Set','Choose any of the available image sets')
+        self.__menu_debug.Append(ID_DEBUG_VIEW_WORKSPACE, "View Workspace","Show the workspace viewer")
         if not hasattr(sys, 'frozen') or os.getenv('CELLPROFILER_DEBUG'):
             self.__menu_debug.Append(ID_DEBUG_RELOAD, "Reload Modules' Source")
             self.__menu_debug.Append(ID_DEBUG_NUMPY, "Numpy Memory Usage...")
@@ -637,6 +652,7 @@ class CPFrame(wx.Frame):
         self.__menu_debug.Enable(ID_DEBUG_CHOOSE_GROUP, False)
         self.__menu_debug.Enable(ID_DEBUG_CHOOSE_IMAGE_SET, False)
         self.__menu_debug.Enable(ID_DEBUG_CHOOSE_RANDOM_IMAGE_SET, False)
+        self.__menu_debug.Enable(ID_DEBUG_VIEW_WORKSPACE, False)
 
         self.__menu_window = wx.Menu()
         self.__menu_window.Append(ID_WINDOW_CLOSE_ALL, "Close &All Open Windows\tctrl+L", 
@@ -855,7 +871,8 @@ class CPFrame(wx.Frame):
     debug_commands = (ID_DEBUG_STEP, ID_DEBUG_NEXT_IMAGE_SET,
                       ID_DEBUG_NEXT_GROUP, ID_DEBUG_CHOOSE_GROUP,
                       ID_DEBUG_CHOOSE_IMAGE_SET, 
-                      ID_DEBUG_CHOOSE_RANDOM_IMAGE_SET)
+                      ID_DEBUG_CHOOSE_RANDOM_IMAGE_SET,
+                      ID_DEBUG_VIEW_WORKSPACE)
     def enable_debug_commands(self):
         """Enable or disable the debug commands (like ID_DEBUG_STEP)"""
         startstop = self.__menu_debug.FindItemById(ID_DEBUG_TOGGLE)
@@ -1002,12 +1019,13 @@ Dustman; omero © 2002-2013 Open Microscopy Environment; and ZeroMQ ©
 2007-2012 iMatix Corporation and Contributors; (g) wxWidgets ©
 1999-2005 Julian Smart, et al.; and wxPython © 1992-2006 Julian Smart,
 et al. and © 1996 Artificial Intelligence Applications Institute under
-the wxWindows license; and (h) Intel Visual Fortran Compiler Run-time
+the wxWindows license; (h) Intel Visual Fortran Compiler Run-time
 Library, Intel Fortran Portability Library, Intel OMP Runtime Library,
 Math Library for Intel Compilers, Short Vector Math Library for Intel
 Compilers under the Single User license provision for
 Resdistributables © 2013 Intel Corporation under the End User License
-Agreement for the Intel Software Development Products.
+Agreement for the Intel Software Development Products; and
+(i) FastEMD © Copyright (c) 2009-2012, Ofir Pele. under BSD licenses
 
 """
 

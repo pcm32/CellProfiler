@@ -25,6 +25,7 @@ from itertools import repeat
 import cellprofiler.preferences as cpprefs
 from cellprofiler.utilities.hdf5_dict import HDF5Dict, get_top_level_group
 from cellprofiler.utilities.hdf5_dict import VERSION, HDFCSV, VStringArray
+from cellprofiler.utilities.hdf5_dict import HDF5ObjectSet
 from cellprofiler.utilities.hdf5_dict import NullLock
 import tempfile
 import numpy as np
@@ -308,6 +309,7 @@ class Measurements(object):
         self.__images = {}
         self.__image_providers = []
         self.__image_number_relationships = {}
+        self.__image_cache_file = None
         if RELATIONSHIP in self.hdf5_dict.top_group:
             rgroup = self.hdf5_dict.top_group[RELATIONSHIP]
             for module_number in rgroup:
@@ -340,6 +342,23 @@ class Measurements(object):
         if hasattr(self, "hdf5_dict"):
             self.hdf5_dict.close()
             del self.hdf5_dict
+        if self.__image_cache_file is not None:
+            #
+            # Discard the contents of the image cache,
+            # "flush" in order to end any disk activity
+            #
+            keys = self.__image_cache_file.keys()
+            for key in keys:
+                del self.__image_cache_file[key]
+            self.__image_cache_file.flush()
+            self.__image_cache_file.close()
+            self.__image_cache_file = None
+            try:
+                os.remove(self.__image_cache_path)
+            except:
+                logger.warn("So sorry: Failed to delete temporary file, %s" %
+                            self.__image_cache_path, exc_info=True)
+            del self.__image_cache_path
         
     def __getitem__(self, key):
         # we support slicing the last dimension for the limited case of [..., :]
@@ -1662,6 +1681,25 @@ class Measurements(object):
         if self.__images.has_key(name):
             del self.__images[name]
             
+    def __ensure_cache_file(self):
+        if self.__image_cache_file is None:
+            h, self.__image_cache_path = tempfile.mkstemp(
+                suffix=".h5", prefix="CellProfilerImageCache")
+            self.__image_cache_file = h5py.File(
+                self.__image_cache_path, "w")
+            self.__hdf5_object_set = HDF5ObjectSet(self.__image_cache_file)
+            os.close(h)
+        
+    def cache(self):
+        '''Move all uncached images to an HDF5 backing-store'''
+        self.__ensure_cache_file()
+        for name, image in self.__images.items():
+            image.cache(name, self.__image_cache_file)
+            
+    def cache_object_set(self, object_set):
+        self.__ensure_cache_file()
+        object_set.cache(self.__hdf5_object_set)
+            
     def clear_cache(self):
         '''Remove all of the cached images'''
         self.__images.clear()
@@ -1681,8 +1719,9 @@ class Measurements(object):
             self.clear_image(name)
         for provider in old_providers:
             self.providers.remove(provider)
-        provider = VanillaImageProvider(name,image)
+        provider = VanillaImageProvider(name, image)
         self.providers.append(provider)
+        self.__images[name] = image
         
     def set_channel_descriptors(self, channel_descriptors):
         '''Write the names and data types of the channel descriptors

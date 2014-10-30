@@ -61,6 +61,8 @@ from cellprofiler.gui.omerologin import OmeroLoginDlg
 from cellprofiler.icons import get_builtin_image
 from cellprofiler.gui.htmldialog import HTMLDialog
 from cellprofiler.gui.pathlist import EVT_PLC_SELECTION_CHANGED
+from cellprofiler.gui.viewworkspace import \
+     show_workspace_viewer, update_workspace_viewer
 
 logger = logging.getLogger(__name__)
 RECENT_PIPELINE_FILE_MENU_ID = [wx.NewId() for i in range(cpprefs.RECENT_FILE_COUNT)]
@@ -172,6 +174,8 @@ class PipelineController:
         wx.EVT_MENU(frame,cpframe.ID_DEBUG_CHOOSE_IMAGE_SET, self.on_debug_choose_image_set)
         wx.EVT_MENU(frame,cpframe.ID_DEBUG_CHOOSE_RANDOM_IMAGE_SET, self.on_debug_random_image_set)
         wx.EVT_MENU(frame,cpframe.ID_DEBUG_RELOAD, self.on_debug_reload)
+        wx.EVT_MENU(frame, cpframe.ID_DEBUG_VIEW_WORKSPACE,
+                    self.on_debug_view_workspace)
 
         # ~*~
         wx.EVT_MENU(frame, cpframe.ID_SAMPLE_INIT, self.on_sample_init)
@@ -196,6 +200,10 @@ class PipelineController:
             self.do_create_workspace()
         if pipeline_path is not None:
             self.do_load_pipeline(pipeline_path)
+        file_list = cpprefs.get_image_set_file()
+        cpprefs.clear_image_set_file()
+        if file_list is not None:
+            self.__pipeline.read_file_list(file_list)
             
     def attach_to_pipeline_list_view(self, pipeline_list_view):
         """Glom onto events from the list box with all of the module names in it
@@ -763,7 +771,7 @@ class PipelineController:
         with open(path, mode="rb") as fd:
             rdr = csv.reader(fd)
             pathnames = sum(rdr, [])
-            self.add_pathnames(pathnames)
+            self.__pipeline.add_pathnames_to_file_list(pathnames)
     
     def do_import_text_file_list(self, path):
         '''Import path names from a text file
@@ -782,7 +790,7 @@ class PipelineController:
         '''
         with open(path, mode="r") as fd:
             pathnames = [p.strip().decode("utf-8") for p in fd]
-            self.add_pathnames(pathnames)
+            self.__pipeline.add_pathnames_to_file_list(pathnames)
             
     def do_export_text_file_list(self, path):
         """Export pathnames to a text file
@@ -1731,27 +1739,7 @@ u"\u2022 Groups: Confirm that that the expected number of images per group are p
     
     def on_pathlist_drop_text(self, x, y, text):
         pathnames = [p.strip() for p in re.split("[\r\n]+", text.strip())]
-        self.add_pathnames(pathnames)
-        
-    def add_pathnames(self, pathnames):
-        '''Add a sequence of pathnames to the path list
-        
-        pathnames - a sequence of either URLs (prefixed by http:, https:,
-                    ftp:, omero:, or file:) or file-system paths.
-        '''
-        urls = []
-        for pathname in pathnames:
-            if len(pathname) == 0:
-                continue
-            if (pathname.startswith("http:") or 
-                pathname.startswith("https:") or
-                pathname.startswith("ftp:") or
-                pathname.startswith("omero:") or
-                pathname.startswith("file:")):
-                urls.append(pathname)
-            else:
-                urls.append(pathname2url(pathname))
-        self.add_urls(urls)
+        self.__pipeline.add_pathnames_to_file_list(pathnames)
         
     def pick_from_pathlist(self, selected_url, title = None, 
                            instructions = None):
@@ -2775,7 +2763,7 @@ u"\u2022 Groups: Confirm that that the expected number of images per group are p
             def cancel_handler(cancelled = cancelled):
                 cancelled[0] = True
             workspace.cancel_handler = cancel_handler
-            module.run(workspace)
+            self.__pipeline.run_module(module, workspace)
             if cancelled[0]:
                 self.__frame.SetCursor(old_cursor)
                 return False
@@ -2791,6 +2779,7 @@ u"\u2022 Groups: Confirm that that the expected number of images per group are p
                   select_next_module):
                 self.__pipeline_list_view.select_one_module(module.module_num+1)
             failure=0
+            update_workspace_viewer(workspace)
         except Exception,instance:
             logger.error("Failed to run module %s", module.module_name,
                          exc_info=True)
@@ -3149,6 +3138,17 @@ u"\u2022 Groups: Confirm that that the expected number of images per group are p
                           "Error reloading modules.",
                           wx.ICON_ERROR | wx.OK)
 
+    def on_debug_view_workspace(self, event):
+        '''Show the workspace viewer'''
+        workspace = cpw.Workspace(
+            self.__pipeline,
+            None,
+            self.__debug_measurements,
+            self.__debug_object_set,
+            self.__debug_measurements,
+            self.__debug_image_set_list)
+        show_workspace_viewer(self.__frame, workspace)
+        
     def on_sample_init(self, event):
         if self.__module_view != None:
             if self.__module_view.get_current_module() != None:

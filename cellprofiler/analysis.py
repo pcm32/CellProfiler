@@ -38,7 +38,6 @@ import cellprofiler.preferences as cpprefs
 from cellprofiler.utilities.zmqrequest import AnalysisRequest, Request, Reply, UpstreamExit
 from cellprofiler.utilities.zmqrequest import register_analysis, cancel_analysis
 from cellprofiler.utilities.zmqrequest import get_announcer_address
-from cellprofiler.utilities.jutil import get_jvm_heap_size_arg
 
 logger = logging.getLogger(__name__)
 
@@ -312,7 +311,7 @@ class AnalysisRunner(object):
         image_set_end - last image set number to process
         overwrite - whether to recompute imagesets that already have data in initial_measurements.
         '''
-        from cellprofiler.utilities.jutil import attach, detach
+        from javabridge import attach, detach
         posted_analysis_started = False
         acknowledged_thread_start = False
         measurements = None
@@ -704,7 +703,8 @@ class AnalysisRunner(object):
             if os.environ['CP_DEBUG_WORKER'] == 'NOT_INPROC':
                 return
             from cellprofiler.analysis_worker import \
-                 AnalysisWorker, NOTIFY_ADDR, NOTIFY_STOP, CancelledException
+                 AnalysisWorker, NOTIFY_ADDR, NOTIFY_STOP
+            from cellprofiler.pipeline import CancelledException
             
             class WorkerRunner(threading.Thread):
                 def __init__(self, work_announce_address):
@@ -739,9 +739,7 @@ class AnalysisRunner(object):
             aw_args = ["--work-announce", cls.work_announce_address,
                        "--plugins-directory", cpprefs.get_plugin_directory(),
                        "--ij-plugins-directory", cpprefs.get_ij_plugin_directory()]
-            jvm_arg = get_jvm_heap_size_arg()
-            if jvm_arg is None:
-                jvm_arg = "%dm" % cpprefs.get_jvm_heap_mb()
+            jvm_arg = "%dm" % cpprefs.get_jvm_heap_mb()
             aw_args.append("--jvm-heap-size=%s" % jvm_arg)
             # stdin for the subprocesses serves as a deadman's switch.  When
             # closed, the subprocess exits.

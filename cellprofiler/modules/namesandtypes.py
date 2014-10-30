@@ -113,9 +113,9 @@ from cellprofiler.modules.loadimages import LoadImagesImageProviderURL
 from cellprofiler.modules.loadimages import convert_image_to_objects
 from cellprofiler.gui.help import FILTER_RULES_BUTTONS_HELP, USING_METADATA_HELP_REF
 from cellprofiler.gui.help import RETAINING_OUTLINES_HELP, NAMING_OUTLINES_HELP
-from bioformats.formatreader import get_omexml_metadata, load_using_bioformats
+from bioformats import get_omexml_metadata, load_image
 import bioformats.omexml as OME
-import cellprofiler.utilities.jutil as J
+import javabridge as J
 
 ASSIGN_ALL = "All images"
 ASSIGN_GUESS = "Try to guess image assignment"
@@ -1672,9 +1672,9 @@ class NamesAndTypes(cpm.CPModule):
                         break
                 else:
                     return
-        raise cps.ValidationError(
-            "At least one channel must have all metadata keys specified. "
-            "All channels have at least one metadata key of (None).", self.join)
+            raise cps.ValidationError(
+                "At least one channel must have all metadata keys specified. "
+                "All channels have at least one metadata key of (None).", self.join)
         
     def upgrade_settings(self, setting_values, variable_revision_number,
                          module_name, from_matlab):
@@ -1915,7 +1915,7 @@ class ObjectsImageProvider(LoadImagesImageProviderURL):
                     properties["series"] = self.series
                 else:
                     properties["series"] = self.series[i]
-            img = load_using_bioformats(
+            img = load_image(
                 self.get_full_name(), 
                 rescale=False, **properties).astype(int)
             img = convert_image_to_objects(img).astype(np.int32)

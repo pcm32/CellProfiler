@@ -57,7 +57,7 @@ from cellprofiler.matlab.cputils import make_cell_struct_dtype, new_string_cell_
 from cellprofiler.utilities.walk_in_background import WalkCollection, THREAD_STOP
 from bioformats.omexml import OMEXML
 import cellprofiler.utilities.version as cpversion
-import cellprofiler.utilities.jutil as J
+import javabridge as J
 
 '''The measurement name of the image number'''
 IMAGE_NUMBER = cpmeas.IMAGE_NUMBER
@@ -379,7 +379,7 @@ class ModuleRunner(threading.Thread):
             
     def run(self):
         try:
-            self.module.run(self.workspace)
+            self.workspace.pipeline.run(self.module, self.workspace)
         except Exception, instance:
             self.exception = instance
             self.tb = sys.exc_info()[2]
@@ -837,6 +837,7 @@ class Pipeline(object):
                     break
                 fd.write(text)
             fd.seek(0)
+            needs_close = False
         elif os.path.exists(fd_or_filename):
             fd = open(fd_or_filename,'rb')
             needs_close = True
@@ -1581,7 +1582,7 @@ class Pipeline(object):
         for module in self.modules(): 
             workspace = cpw.Workspace(self, module, image_set, object_set, 
                                       measurements, image_set_list)
-            module.run(workspace)
+            self.run_module(module, workspace)
         
         # Populate a dictionary for output with the images to be exported
         output_dict = {}
@@ -1796,7 +1797,7 @@ class Pipeline(object):
                     t0 = sum(os.times()[:-1])
                     if not run_in_background:
                         try:
-                            module.run(workspace)
+                            self.run_module(module, workspace)
                         except Exception, instance:
                             logger.error(
                                 "Error detected during run of module %s",
@@ -1931,7 +1932,7 @@ class Pipeline(object):
             start_time = datetime.datetime.now()
             t0 = sum(os.times()[:-1])
             try:
-                module.run(workspace)
+                self.run_module(module, workspace)
                 if module.show_window:
                     display_handler(module, workspace.display_data, image_set_number)
             except CancelledException:
@@ -1966,6 +1967,8 @@ class Pipeline(object):
                              'ExecutionTime_%02d%s' % (module.module_num, module.module_name)] = delta_secs
 
             measurements.flush()
+            if workspace.disposition == cpw.DISPOSITION_SKIP:
+                return
 
     def end_run(self):
         '''Tell everyone that a run is ending'''
@@ -2020,7 +2023,7 @@ class Pipeline(object):
                         image_set.providers.extend(old_providers)
                         break
                     else:
-                        module.run(w)
+                        self.run_module(module, w)
                     if progress_dialog is not None:
                         should_continue, skip = progress_dialog.Update(i+1)
                         if not should_continue:
@@ -2030,6 +2033,21 @@ class Pipeline(object):
             if progress_dialog is not None:
                 progress_dialog.Destroy()
             m.image_set_number = orig_image_number
+            
+    def run_module(self, module, workspace):
+        '''Run one CellProfiler module
+        
+        Run the CellProfiler module with whatever preparation and cleanup
+        needs to be done before and after.
+        '''
+        try:
+            module.run(workspace)
+        finally:
+            try:
+                workspace.cache()
+            except:
+                logger.error("Exception while trying to cache",
+                             exc_info=True)
         
     def write_experiment_measurements(self, m):
         '''Write the standard experiment measurments to the measurements file
@@ -2575,7 +2593,54 @@ class Pipeline(object):
         self.__filtered_image_plane_details_images_settings = tuple()
         self.__filtered_image_plane_details_metadata_settings = tuple()
         self.__image_plane_details_generation = file_list.generation
-    
+        
+    def read_file_list(self, path_or_fd, add_undo=True):
+        '''Read a file of one file or URL per line into the file list
+        
+        path - a path to a file or a URL
+        '''
+        if isinstance(path_or_fd, basestring):
+            from cellprofiler.modules.loadimages import \
+                 url2pathname, FILE_SCHEME, PASSTHROUGH_SCHEMES
+            pathname = path_or_fd
+            if pathname.startswith(FILE_SCHEME):
+                pathname = url2pathname(pathname)
+                with open(pathname, "r") as fd:
+                    self.read_file_list(fd, add_undo=add_undo)
+            elif any(pathname.startswith(_) for _ in PASSTHROUGH_SCHEMES):
+                import urllib2
+                try:
+                    fd = urllib2.urlopen(pathname)
+                    self.read_file_list(fd, add_undo=add_undo)
+                finally:
+                    fd.close()
+            else:
+                with open(pathname, "r") as fd:
+                    self.read_file_list(fd, add_undo=add_undo)
+            return
+        self.add_pathnames_to_file_list(
+            map((lambda x: x.strip()), 
+                filter((lambda x: len(x) > 0), path_or_fd)),
+            add_undo=add_undo)
+        
+            
+    def add_pathnames_to_file_list(self, pathnames, add_undo=True):
+        '''Add a sequence of paths or URLs to the file list'''
+        from cellprofiler.modules.loadimages import pathname2url
+        urls = []
+        for pathname in pathnames:
+            if len(pathname) == 0:
+                continue
+            if (pathname.startswith("http:") or 
+                pathname.startswith("https:") or
+                pathname.startswith("ftp:") or
+                pathname.startswith("omero:") or
+                pathname.startswith("file:")):
+                urls.append(pathname)
+            else:
+                urls.append(pathname2url(pathname))
+        self.add_urls(urls, add_undo=add_undo)
+            
     def get_module_state(self, module_name_or_module):
         '''Return an object representing the state of the named module
         

@@ -3,21 +3,23 @@
 %define tarname cellprofiler
 %define pref /usr/cellprofiler
 %define python %{pref}/bin/python
+%define githuburl git+git://github.com/CellProfiler
+%define javabridge_version 1.0.9
+%define bioformats_version 1.0.3
+%define cython_version 0.20.2
 
 Name:      %{pkgname}
 Summary:   Cell image analysis software
 Version:   %{version}
 Release:   %{release}
 Source0:   %{tarname}.tar.gz
-Patch0:    cellprofiler-avoid-blank-libdir-for-libjvm.diff
-Patch1:    cellprofiler-frozen.diff
 License:   GPLv2
 URL:       http://www.cellprofiler.org/
 Packager:  Vebjorn Ljosa <ljosa@broad.mit.edu>
 BuildRoot: %{_tmppath}/%{pkgname}-buildroot
 Prefix:    %{pref}
-Requires:  cellprofiler-cython cellprofiler-python cellprofiler-ilastik cellprofiler-decorator cellprofiler-h5py cellprofiler-matplotlib cellprofiler-mysqlpython cellprofiler-scipy cellprofiler-pysqlite cellprofiler-setuptools cellprofiler-wxpython cellprofiler-pyzmq cellprofiler-jdk cellprofiler-pil xorg-x11-fonts-Type1 liberation-fonts-common liberation-sans-fonts
-BuildRequires: gcc cellprofiler-numpy-devel   cellprofiler-cython cellprofiler-python cellprofiler-ilastik cellprofiler-decorator cellprofiler-h5py cellprofiler-matplotlib cellprofiler-mysqlpython cellprofiler-scipy cellprofiler-pysqlite cellprofiler-setuptools cellprofiler-wxpython cellprofiler-pyzmq cellprofiler-jdk
+Requires:  cellprofiler-cython = %{cython_version} cellprofiler-python cellprofiler-ilastik cellprofiler-decorator cellprofiler-h5py cellprofiler-matplotlib cellprofiler-mysqlpython cellprofiler-scipy cellprofiler-scikit-learn cellprofiler-pysqlite cellprofiler-setuptools cellprofiler-wxpython cellprofiler-pyzmq cellprofiler-jdk cellprofiler-pil xorg-x11-fonts-Type1 liberation-fonts-common liberation-sans-fonts cellprofiler-javabridge = %{javabridge_version} cellprofiler-bioformats = %{bioformats_version}
+BuildRequires: gcc gcc-c++ cellprofiler-numpy-devel   cellprofiler-cython cellprofiler-python cellprofiler-ilastik cellprofiler-decorator cellprofiler-h5py cellprofiler-matplotlib cellprofiler-mysqlpython cellprofiler-scipy cellprofiler-pysqlite cellprofiler-setuptools cellprofiler-wxpython cellprofiler-pyzmq cellprofiler-jdk cellprofiler-javabridge
 
 %description
 Cell image analysis software
@@ -25,18 +27,19 @@ Cell image analysis software
 %prep
 
 %setup -q -n CellProfiler
-%patch0
 
 %build
 
 PATH=%{pref}/bin:%{pref}/jdk/bin:$PATH \
     LD_LIBRARY_PATH=%{pref}/jdk/lib:%{pref}/jdk/jre/lib/amd64/server: \
     JAVA_HOME=%{pref}/jdk \
-    python CellProfiler.py --build-and-exit
+    MAVEN_OPTS="-Xmx1024m" \
+    python external_dependencies.py
+
 PATH=%{pref}/bin:%{pref}/jdk/bin:$PATH \
     LD_LIBRARY_PATH=%{pref}/jdk/lib:%{pref}/jdk/jre/lib/amd64/server: \
     JAVA_HOME=%{pref}/jdk \
-    python external_dependencies.py
+    python CellProfiler.py --build-and-exit --do-not-fetch
 
 patch <<EOF
 --- CellProfiler.py.orig	2013-10-16 20:59:07.459360385 -0400
@@ -85,10 +88,10 @@ chmod 755 $RPM_BUILD_ROOT/usr/bin/cellprofiler
 %{pref}/lib/python%{pyversion}/site-packages/_cpmorphology.so
 %{pref}/lib/python%{pyversion}/site-packages/_cpmorphology2.so
 %{pref}/lib/python%{pyversion}/site-packages/_filter.so
+%{pref}/lib/python%{pyversion}/site-packages/_fastemd.so
 %{pref}/lib/python%{pyversion}/site-packages/_lapjv.so
 %{pref}/lib/python%{pyversion}/site-packages/_propagate.so
 %{pref}/lib/python%{pyversion}/site-packages/_watershed.so
-%{pref}/lib/python%{pyversion}/site-packages/javabridge.so
 %{pref}/lib/python%{pyversion}/site-packages/cpmath-0.0.0-py2.7.egg-info
 %{pref}/lib/python%{pyversion}/site-packages/utilities-0.0.0-py2.7.egg-info
 /usr/bin/cellprofiler

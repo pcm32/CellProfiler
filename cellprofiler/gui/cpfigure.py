@@ -196,7 +196,7 @@ def close_all(parent):
     reset_cpfigure_position()
     try:
         from imagej.windowmanager import close_all_windows
-        from cellprofiler.utilities.jutil import attach, detach
+        from javabridge import attach, detach
         attach()
         try:
             close_all_windows()
@@ -285,7 +285,7 @@ class CPFigureFrame(wx.Frame):
         self.widgets = []
         self.mouse_down = None
         self.remove_menu = []
-        sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer = wx.BoxSizer(wx.HORIZONTAL)
         self.SetSizer(sizer)
         if cpprefs.get_use_more_figure_space():
             matplotlib.rcParams.update(dict([('figure.subplot.left', 0.025),
@@ -301,7 +301,10 @@ class CPFigureFrame(wx.Frame):
             matplotlib.rcdefaults()
         self.figure = figure = matplotlib.figure.Figure()
         self.panel = FigureCanvasWxAgg(self, -1, self.figure)
-        sizer.Add(self.panel, 1, wx.EXPAND) 
+        sizer.Add(self.panel, 1, wx.EXPAND)
+        self.secret_panel = wx.Panel(self)
+        self.secret_panel.Hide()
+        sizer.Add(self.secret_panel, 0, wx.EXPAND)
         self.status_bar = self.CreateStatusBar()
         wx.EVT_CLOSE(self, self.on_close)
         if subplots:
@@ -864,17 +867,24 @@ class CPFigureFrame(wx.Frame):
             # Store zoom limits
             xlims = self.subplot(x,y).get_xlim()
             ylims = self.subplot(x,y).get_ylim()
+            axes = self.subplot(x, y)
             if evt.Id == MENU_CONTRAST_RAW:
                 params['normalize'] = False
             elif evt.Id == MENU_CONTRAST_NORMALIZED:
                 params['normalize'] = True
             elif evt.Id == MENU_CONTRAST_LOG:
                 params['normalize'] = 'log'
-            self.subplot_imshow(x, y, self.images[(x,y)], **params)
-            # Restore plot zoom
-            self.subplot(x,y).set_xlim(xlims[0], xlims[1])
-            self.subplot(x,y).set_ylim(ylims[0], ylims[1])                
-            self.figure.canvas.draw()
+            for artist in axes.artists:
+                if isinstance(artist, CPImageArtist):
+                    artist.kwargs["normalize"] = params['normalize']
+                    self.figure.canvas.draw()
+                    return
+            else:
+                self.subplot_imshow(x, y, self.images[(x,y)], **params)
+                # Restore plot zoom
+                self.subplot(x,y).set_xlim(xlims[0], xlims[1])
+                self.subplot(x,y).set_ylim(ylims[0], ylims[1])                
+                self.figure.canvas.draw()
             
         def change_interpolation(evt):
             if evt.Id == MENU_INTERPOLATION_NEAREST:
@@ -887,9 +897,12 @@ class CPFigureFrame(wx.Frame):
             for artist in axes.artists:
                 if isinstance(artist, CPImageArtist):
                     artist.interpolation = params['interpolation']
+                    artist.kwargs["interpolation"] = params["interpolation"]
                     self.figure.canvas.draw()
                     return
             else:
+                xlims = self.subplot(x,y).get_xlim()
+                ylims = self.subplot(x,y).get_ylim()
                 self.subplot_imshow(x, y, self.images[(x,y)], **params)
                 # Restore plot zoom
                 self.subplot(x,y).set_xlim(xlims[0], xlims[1])
@@ -1760,8 +1773,8 @@ def show_image(url, parent = None, needs_raise_after = True):
             from cellprofiler.modules.loadimages import url2pathname
             image = loadmat(url2pathname(url), struct_as_record=True)["Image"]
         else:
-            from bioformats.formatreader import load_using_bioformats_url
-            image = load_using_bioformats_url(url)
+            from bioformats import load_image_url
+            image = load_image_url(url)
     except Exception, e:
         from cellprofiler.gui.errordialog import display_error_dialog
         display_error_dialog(None, e, None, 
@@ -1774,7 +1787,7 @@ def show_image(url, parent = None, needs_raise_after = True):
     if image.ndim == 2:
         frame.subplot_imshow_grayscale(0, 0, image, title = filename)
     else:
-        frame.subplot_imshow_color(0, 0, image, title = filename)
+        frame.subplot_imshow_color(0, 0, image[:, :, :3], title = filename)
     frame.panel.draw()
     if needs_raise_after:
         #%$@ hack hack hack
